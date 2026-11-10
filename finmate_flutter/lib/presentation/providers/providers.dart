@@ -1,9 +1,11 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../data/datasources/api_service.dart';
 import '../../data/models/models.dart';
 
 final authStateProvider = StateProvider<bool>((_) => false);
+final themeProvider = StateProvider<ThemeMode>((_) => ThemeMode.light);
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final client = ApiClient();

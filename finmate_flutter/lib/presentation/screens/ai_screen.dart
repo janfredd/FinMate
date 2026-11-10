@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
+import '../../core/ui_kit.dart';
 import '../providers/providers.dart';
 
 // Chat bubbles + proactive insights header.
@@ -35,62 +36,182 @@ class _AiState extends ConsumerState<AiScreen> {
   Widget build(BuildContext context) {
     final msgs = ref.watch(chatProvider);
     final insights = ref.watch(insightsProvider);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('AI Assistant')),
       body: Column(children: [
         insights.when(
           data: (list) => list.isEmpty
               ? const SizedBox()
-              : Container(
-                  width: double.infinity, color: Colors.amber[50],
-                  padding: const EdgeInsets.all(8),
-                  child: Text('Insight: ${list.first['message']}',
-                      style: const TextStyle(fontSize: 12))),
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                  child: SoftCard(
+                    padding: const EdgeInsets.all(14),
+                    gradient: LinearGradient(
+                      colors: [
+                        scheme.secondary.withValues(alpha: 0.16),
+                        scheme.primary.withValues(alpha: 0.1),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shadow: false,
+                    child: Row(
+                      children: [
+                        PlayfulIcon(
+                            icon: Icons.auto_awesome_rounded,
+                            color: scheme.secondary,
+                            size: 40,
+                            iconSize: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Insight: ${list.first['message']}',
+                            style: theme.textTheme.bodySmall,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
           loading: () => const SizedBox(),
           error: (_, __) => const SizedBox(),
         ),
         Expanded(
           child: msgs.isEmpty
-              ? const Center(child: Text(
-                  'Ask about your spending, e.g.\n"Where did my money go in October?"',
-                  textAlign: TextAlign.center))
+              ? const EmptyState(
+                  icon: Icons.smart_toy_rounded,
+                  title: 'Hai, aku FinMate AI',
+                  message:
+                      'Tanya soal pola pengeluaranmu, sisa budget, atau tips nabung. Aku siap bantu!',
+                )
               : ListView.builder(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
                   itemCount: msgs.length,
                   itemBuilder: (_, i) {
                     final m = msgs[i];
                     final me = m.role == 'user';
                     return Align(
-                      alignment: me ? Alignment.centerRight : Alignment.centerLeft,
+                      alignment:
+                          me ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.symmetric(vertical: 5),
+                        padding: const EdgeInsets.all(14),
                         constraints: const BoxConstraints(maxWidth: 300),
                         decoration: BoxDecoration(
-                          color: me ? Colors.teal : Colors.grey[200],
-                          borderRadius: BorderRadius.circular(16),
+                          gradient: me
+                              ? LinearGradient(
+                                  colors: [scheme.primary, scheme.tertiary],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                              : null,
+                          color: me ? null : scheme.surface,
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(20),
+                            topRight: const Radius.circular(20),
+                            bottomLeft: Radius.circular(me ? 20 : 6),
+                            bottomRight: Radius.circular(me ? 6 : 20),
+                          ),
+                          border: me
+                              ? null
+                              : Border.all(
+                                  color: scheme.onSurface
+                                      .withValues(alpha: 0.07)),
+                          boxShadow: me
+                              ? [
+                                  BoxShadow(
+                                    color:
+                                        scheme.primary.withValues(alpha: 0.24),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ]
+                              : null,
                         ),
-                        child: Text(m.text,
-                            style: TextStyle(
-                                color: me ? Colors.white : Colors.black87)),
+                        child: Text(
+                          m.text,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: me ? scheme.onPrimary : scheme.onSurface,
+                          ),
+                        ),
                       ),
                     );
                   }),
         ),
-        if (busy) const LinearProgressIndicator(),
+        if (busy)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24),
+            child: LinearProgressIndicator(minHeight: 3),
+          ),
         SafeArea(
-          child: Row(children: [
-            Expanded(
-                child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: TextField(controller: input,
-                        decoration: const InputDecoration(
-                            hintText: 'Ask a question...'),
-                        onSubmitted: (_) => _send()))),
-            IconButton(icon: const Icon(Icons.send), onPressed: _send),
-          ]),
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: input,
+                    textInputAction: TextInputAction.send,
+                    decoration: const InputDecoration(
+                      hintText: 'Tanya apa aja...',
+                      prefixIcon: Icon(Icons.chat_bubble_outline_rounded),
+                    ),
+                    onSubmitted: (_) => _send(),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _SendButton(onTap: busy ? null : _send),
+              ],
+            ),
+          ),
         ),
       ]),
+    );
+  }
+}
+
+class _SendButton extends StatelessWidget {
+  final VoidCallback? onTap;
+  const _SendButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 160),
+      opacity: onTap == null ? 0.5 : 1,
+      child: Container(
+        width: 54,
+        height: 54,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [scheme.primary, scheme.tertiary],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: scheme.primary.withValues(alpha: 0.3),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: onTap,
+            child: Icon(Icons.send_rounded, color: scheme.onPrimary),
+          ),
+        ),
+      ),
     );
   }
 }

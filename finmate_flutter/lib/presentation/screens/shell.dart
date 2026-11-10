@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
+import '../../core/ui_kit.dart';
 import '../providers/providers.dart';
 import 'dashboard_screen.dart';
 import 'transactions_screen.dart';
@@ -38,11 +39,31 @@ class _HomeShellState extends State<HomeShell> {
         selectedIndex: idx,
         onDestinationSelected: (i) => setState(() => idx = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard), label: 'Dashboard'),
-          NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Transactions'),
-          NavigationDestination(icon: Icon(Icons.savings), label: 'Budget'),
-          NavigationDestination(icon: Icon(Icons.smart_toy), label: 'AI Assistant'),
-          NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
+          NavigationDestination(
+            icon: Icon(Icons.space_dashboard_outlined),
+            selectedIcon: Icon(Icons.space_dashboard_rounded),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long_rounded),
+            label: 'Transactions',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.savings_outlined),
+            selectedIcon: Icon(Icons.savings_rounded),
+            label: 'Budget',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.smart_toy_outlined),
+            selectedIcon: Icon(Icons.smart_toy_rounded),
+            label: 'AI Assistant',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
+            label: 'Profile',
+          ),
         ],
       ),
     );
@@ -74,12 +95,20 @@ Widget loading() => const Center(child: CircularProgressIndicator());
 Widget errView(Object e, VoidCallback retry) {
   final message = friendlyError(e);
   if (message.isEmpty) return const SizedBox.shrink();
-  return Center(
-    child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Text(message, textAlign: TextAlign.center),
-      const SizedBox(height: 8),
-      ElevatedButton(onPressed: retry, child: const Text('Retry')),
-    ]));
+  return EmptyState(
+    icon: Icons.cloud_off_rounded,
+    title: 'Ups, ada kendala',
+    message: message,
+    action: FilledButton.icon(
+      onPressed: retry,
+      icon: const Icon(Icons.refresh_rounded),
+      label: const Text('Coba lagi'),
+    ),
+  );
 }
-Widget emptyView(String msg) => Center(
-  child: Text(msg, style: const TextStyle(color: Colors.grey)));
+
+Widget emptyView(String msg) => EmptyState(
+      icon: Icons.inbox_rounded,
+      title: 'Belum ada data',
+      message: msg,
+    );

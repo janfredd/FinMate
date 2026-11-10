@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'core/api_client.dart';
 import 'core/theme.dart';
+import 'presentation/providers/providers.dart';
 import 'presentation/screens/shell.dart';
 
 @pragma('vm:entry-point')
@@ -42,7 +43,10 @@ class _AppState extends ConsumerState<FinMateApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-        title: 'FinMate', theme: finMateTheme,
+        title: 'FinMate',
+        theme: finMateLightTheme,
+        darkTheme: finMateDarkTheme,
+        themeMode: ref.watch(themeProvider),
         navigatorKey: appNavigatorKey,
         home: const SplashLoader(),
         debugShowCheckedModeBanner: false);
