@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../core/format.dart';
 import '../providers/providers.dart';
 import 'shell.dart';
 
@@ -59,7 +60,7 @@ class DashboardScreen extends ConsumerWidget {
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: items.map((e) => Text(
-                            '${e['category_name']}: ${e['total']}',
+                            '${e['category_name']}: ${formatRupiah((e['total'] as num).toDouble())}',
                             overflow: TextOverflow.ellipsis)).toList()),
                   ),
                 ]);
@@ -78,7 +79,7 @@ class DashboardScreen extends ConsumerWidget {
                       color: t.type == 'income' ? Colors.green : Colors.red),
                   title: Text(t.merchant ?? t.categoryName ?? '-'),
                   subtitle: Text('${t.date ?? ''} • ${t.source ?? ''}'),
-                  trailing: Text(t.amount.toStringAsFixed(0),
+                  trailing: Text(formatRupiah(t.amount),
                       style: const TextStyle(fontWeight: FontWeight.bold)),
                 )).toList()),
             loading: () => loading(),
@@ -96,7 +97,7 @@ class DashboardScreen extends ConsumerWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [Icon(icon, color: c, size: 18), const SizedBox(width: 4),
                 Text(label, style: const TextStyle(fontSize: 12))]),
-              Text(v.toStringAsFixed(0),
+              Text(formatRupiah(v),
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: c)),
             ]))));
 }

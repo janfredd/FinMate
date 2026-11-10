@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'core/api_client.dart';
 import 'core/theme.dart';
 import 'presentation/screens/shell.dart';
 
@@ -42,6 +43,7 @@ class _AppState extends ConsumerState<FinMateApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
         title: 'FinMate', theme: finMateTheme,
+        navigatorKey: appNavigatorKey,
         home: const SplashLoader(),
         debugShowCheckedModeBanner: false);
   }

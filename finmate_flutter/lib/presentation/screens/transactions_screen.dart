@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/api_client.dart';
+import '../../core/format.dart';
 import '../providers/providers.dart';
 import 'shell.dart';
 import 'add_txn_screen.dart';
@@ -73,14 +75,19 @@ class _TxnState extends ConsumerState<TransactionsScreen> {
                     key: Key(t.id),
                     background: Container(color: Colors.red),
                     onDismissed: (_) async {
-                      await ref.read(apiProvider).deleteTxn(t.id);
-                      refreshAll(ref);
+                      try {
+                        await ref.read(apiProvider).deleteTxn(t.id);
+                        refreshAll(ref);
+                      } catch (e) {
+                        if (context.mounted) showFriendlyError(context, e);
+                        refreshAll(ref);
+                      }
                     },
                     child: ListTile(
                       leading: CircleAvatar(
                           backgroundColor: t.type == 'income' ? Colors.green[100] : Colors.red[100],
                           child: Icon(t.type == 'income' ? Icons.add : Icons.remove)),
-                      title: Text('${t.merchant ?? t.categoryName ?? '-'} • ${t.amount.toStringAsFixed(0)}'),
+                      title: Text('${t.merchant ?? t.categoryName ?? '-'} • ${formatRupiah(t.amount)}'),
                       subtitle: Text('${t.date ?? ''} • ${t.categoryName ?? ''} • ${t.source ?? ''}\n${t.note ?? ''}'),
                       isThreeLine: true,
                       onTap: () => Navigator.push(context, MaterialPageRoute(
@@ -107,11 +114,15 @@ class _TxnState extends ConsumerState<TransactionsScreen> {
                 ListTile(leading: const Icon(Icons.email),
                     title: const Text('Import from Gmail'),
                     onTap: () async { Navigator.pop(context);
-                      final n = await ref.read(apiProvider).gmailImport();
-                      refreshAll(ref);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Imported $n transactions')));
+                      try {
+                        final n = await ref.read(apiProvider).gmailImport();
+                        refreshAll(ref);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Imported $n transactions')));
+                        }
+                      } catch (e) {
+                        if (context.mounted) showFriendlyError(context, e);
                       }
                     }),
                 ListTile(leading: const Icon(Icons.camera_alt),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/api_client.dart';
 import '../providers/providers.dart';
 
 // Chat bubbles + proactive insights header.
@@ -23,7 +24,8 @@ class _AiState extends ConsumerState<AiScreen> {
       final a = await ref.read(apiProvider).chat(q); // <10s target
       ref.read(chatProvider.notifier).addAi(a);
     } catch (e) {
-      ref.read(chatProvider.notifier).addAi('Error: $e');
+      final msg = friendlyError(e);
+      if (msg.isNotEmpty) ref.read(chatProvider.notifier).addAi(msg);
     } finally {
       setState(() => busy = false);
     }

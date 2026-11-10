@@ -6,24 +6,50 @@ from datetime import date, timedelta
 from app.core.config import settings
 from app.models.models import Transaction, Category, Insight
 
-GEMINI_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
-              "{model}:generateContent?key={key}")
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+GEMINI_TIMEOUT = 60
 
 async def ask_gemini(prompt: str) -> str:
     if not settings.GEMINI_API_KEY:
-        # Offline/dev fallback keeps the endpoint testable without a key.
         return "(Gemini API key not configured) Echo of prompt:\n" + prompt[:2000]
-    url = GEMINI_URL.format(model=settings.GEMINI_MODEL, key=settings.GEMINI_API_KEY)
-    body = {"contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": 1024, "temperature": 0.4}}
-    async with httpx.AsyncClient(timeout=30) as c:
-        r = await c.post(url, json=body)
-        r.raise_for_status()
-        data = r.json()
+
+    model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash-latest')
+
+    # Paksa ke versi -latest agar kompatibel dengan SDK baru
+    if model_name in ['gemini-1.5-flash', 'gemini-1.5-pro']:
+        model_name = 'gemini-1.5-flash-latest'
+
     try:
-        return data["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError):
-        return "Sorry, I could not generate a response right now."
+        async with httpx.AsyncClient(timeout=GEMINI_TIMEOUT) as client:
+            r = await client.post(
+                f"{GEMINI_API_URL}/{model_name}:generateContent",
+                params={"key": settings.GEMINI_API_KEY},
+                json={"contents": [{"parts": [{"text": prompt}]}]},
+            )
+
+        # Tangani status non-200 agar server tidak crash (HTTP 500)
+        if r.status_code != 200:
+            return f"Error dari Gemini ({r.status_code}): {r.text}"
+
+        data = r.json()
+        candidates = data.get("candidates") or []
+        if not candidates:
+            return f"Error dari Gemini: respons tidak berisi candidates: {data}"
+
+        parts = candidates[0].get("content", {}).get("parts") or []
+        text = "".join(p.get("text", "") for p in parts).strip()
+        if not text:
+            return f"Error dari Gemini: respons kosong: {data}"
+
+        return text
+
+    except httpx.TimeoutException:
+        return "Error dari Gemini: permintaan timeout setelah 60 detik."
+    except httpx.RequestError as e:
+        return f"Error dari Gemini: gagal terhubung ke API: {str(e)}"
+    except Exception as e:
+        return f"Error dari Gemini: {str(e)}"
+
 
 def build_context(db: Session, user_id: str, limit: int = 100) -> str:
     txns = (db.query(Transaction).filter(Transaction.user_id == user_id)
@@ -36,6 +62,7 @@ def build_context(db: Session, user_id: str, limit: int = 100) -> str:
         lines.append(f"{t.date} | {t.type} | {float(t.amount):.2f} | "
                      f"{cat.get(t.category_id, '-')} | {t.merchant or '-'} | {t.note or ''}")
     return "\n".join(lines)
+
 
 def generate_proactive_insights(db: Session, user_id: str) -> list[str]:
     """Rule-based: spikes per category vs previous 30d, budget-free saving tips."""

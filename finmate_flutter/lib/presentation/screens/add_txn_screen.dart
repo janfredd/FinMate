@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../../core/receipt_parser.dart';
+import '../../core/api_client.dart';
 import '../../data/models/models.dart';
 import '../providers/providers.dart';
 
@@ -39,7 +40,28 @@ class _AddState extends ConsumerState<AddTxnScreen> {
   }
 
   Future<void> _scan() async {
-    final img = await ImagePicker().pickImage(source: ImageSource.camera);
+    final imgSource = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.camera_alt),
+            title: const Text('Kamera'),
+            subtitle: const Text('Ambil foto struk atau screenshot'),
+            onTap: () => Navigator.pop(ctx, ImageSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library),
+            title: const Text('Galeri'),
+            subtitle: const Text('Pilih gambar struk / mutasi m-banking'),
+            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+          ),
+        ]),
+      ),
+    );
+    if (imgSource == null) return;
+
+    final img = await ImagePicker().pickImage(source: imgSource);
     if (img == null) return;
     setState(() => scanning = true);
     try {
@@ -52,10 +74,16 @@ class _AddState extends ConsumerState<AddTxnScreen> {
       if (p.date != null) {
         date = DateTime.tryParse(p.date!) ?? date;
       }
+      if (p.type != null) type = p.type!;
       source = 'Receipt';
       if (mounted) {
+        setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('OCR done — please confirm the values.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        showFriendlyError(context, e);
       }
     } finally {
       if (mounted) setState(() => scanning = false);
@@ -63,10 +91,17 @@ class _AddState extends ConsumerState<AddTxnScreen> {
   }
 
   Future<void> _save() async {
+    final parsedAmount =
+        double.tryParse(amount.text.trim().replaceAll(',', '.'));
+    if (parsedAmount == null || parsedAmount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Masukkan nominal yang valid, contoh: 6,78 atau 6.78')));
+      return;
+    }
     setState(() => busy = true);
     try {
       final body = {
-        'type': type, 'amount': double.parse(amount.text),
+        'type': type, 'amount': parsedAmount,
         'category_id': catId, 'date': date.toIso8601String().substring(0, 10),
         'merchant': merchant.text.isEmpty ? null : merchant.text,
         'note': note.text.isEmpty ? null : note.text, 'source': source,
@@ -81,8 +116,7 @@ class _AddState extends ConsumerState<AddTxnScreen> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Save failed: $e')));
+        showFriendlyError(context, e);
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -109,8 +143,11 @@ class _AddState extends ConsumerState<AddTxnScreen> {
               selected: {type},
               onSelectionChanged: (s) => setState(() => type = s.first)),
           const SizedBox(height: 12),
-          TextField(controller: amount, keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Amount')),
+          TextField(controller: amount,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                  labelText: 'Amount', hintText: 'Contoh: 6,78')),
           const SizedBox(height: 12),
           cats.when(
             data: (c) => DropdownButtonFormField<String>(
@@ -119,7 +156,14 @@ class _AddState extends ConsumerState<AddTxnScreen> {
                     DropdownMenuItem(value: e.id, child: Text(e.name))).toList(),
                 onChanged: (v) => setState(() => catId = v)),
             loading: () => const CircularProgressIndicator(),
-            error: (e, _) => Text('Categories: $e'),
+            error: (e, _) {
+              final message = friendlyError(e);
+              return message.isEmpty
+                  ? const SizedBox()
+                  : Text(message,
+                      style: const TextStyle(color: Colors.red),
+                      textAlign: TextAlign.center);
+            },
           ),
           const SizedBox(height: 12),
           TextField(controller: merchant,

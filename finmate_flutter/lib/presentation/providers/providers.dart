@@ -3,9 +3,17 @@ import '../../core/api_client.dart';
 import '../../data/datasources/api_service.dart';
 import '../../data/models/models.dart';
 
-final apiClientProvider = Provider((_) => ApiClient());
-final apiProvider = Provider((ref) => ApiService(ref.watch(apiClientProvider)));
 final authStateProvider = StateProvider<bool>((_) => false);
+
+final apiClientProvider = Provider<ApiClient>((ref) {
+  final client = ApiClient();
+  client.onUnauthorized = () async {
+    ref.read(authStateProvider.notifier).state = false;
+    appNavigatorKey.currentState?.popUntil((route) => route.isFirst);
+  };
+  return client;
+});
+final apiProvider = Provider((ref) => ApiService(ref.watch(apiClientProvider)));
 
 final categoriesProvider = FutureProvider<List<Category>>(
     (ref) => ref.watch(apiProvider).categories());

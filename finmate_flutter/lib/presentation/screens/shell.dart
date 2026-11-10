@@ -71,11 +71,15 @@ class _SplashLoaderState extends ConsumerState<SplashLoader> {
 }
 
 Widget loading() => const Center(child: CircularProgressIndicator());
-Widget errView(Object e, VoidCallback retry) => Center(
-  child: Column(mainAxisSize: MainAxisSize.min, children: [
-    Text('Error: ${friendlyError(e)}', textAlign: TextAlign.center),
-    const SizedBox(height: 8),
-    ElevatedButton(onPressed: retry, child: const Text('Retry')),
-  ]));
+Widget errView(Object e, VoidCallback retry) {
+  final message = friendlyError(e);
+  if (message.isEmpty) return const SizedBox.shrink();
+  return Center(
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Text(message, textAlign: TextAlign.center),
+      const SizedBox(height: 8),
+      ElevatedButton(onPressed: retry, child: const Text('Retry')),
+    ]));
+}
 Widget emptyView(String msg) => Center(
   child: Text(msg, style: const TextStyle(color: Colors.grey)));

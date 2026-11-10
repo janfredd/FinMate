@@ -26,6 +26,8 @@ class ApiService {
   Future<void> logout() async {
     try {
       await _d.post('/auth/logout');
+    } catch (_) {
+      // Always sign out locally, even if the server is unreachable.
     } finally {
       await client.clearToken();
     }

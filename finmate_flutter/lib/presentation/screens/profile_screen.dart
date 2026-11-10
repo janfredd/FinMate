@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/api_client.dart';
 import '../providers/providers.dart';
 import 'shell.dart';
 
@@ -36,17 +37,25 @@ class ProfileScreen extends ConsumerWidget {
                 title: const Text('Connect Gmail'),
                 subtitle: const Text('Auto-import bank notification emails'),
                 onTap: () async {
-                  final url = await api.gmailConnect();
-                  await launchUrl(Uri.parse(url),
-                      mode: LaunchMode.externalApplication);
+                  try {
+                    final url = await api.gmailConnect();
+                    await launchUrl(Uri.parse(url),
+                        mode: LaunchMode.externalApplication);
+                  } catch (e) {
+                    if (context.mounted) showFriendlyError(context, e);
+                  }
                 }),
             ListTile(leading: const Icon(Icons.link_off),
                 title: const Text('Revoke Gmail access'),
                 onTap: () async {
-                  await api.gmailRevoke();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('Gmail access revoked.')));
+                  try {
+                    await api.gmailRevoke();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('Gmail access revoked.')));
+                    }
+                  } catch (e) {
+                    if (context.mounted) showFriendlyError(context, e);
                   }
                 }),
             ListTile(leading: const Icon(Icons.logout),
@@ -71,9 +80,16 @@ class ProfileScreen extends ConsumerWidget {
                             style: FilledButton.styleFrom(
                                 backgroundColor: Colors.red),
                             onPressed: () async {
-                              await api.deleteAccount();
-                              ref.read(authStateProvider.notifier).state = false;
-                              if (context.mounted) Navigator.pop(context);
+                              try {
+                                await api.deleteAccount();
+                                ref.read(authStateProvider.notifier).state =
+                                    false;
+                                if (context.mounted) Navigator.pop(context);
+                              } catch (e) {
+                                if (context.mounted) {
+                                  showFriendlyError(context, e);
+                                }
+                              }
                             },
                             child: const Text('Delete')),
                       ]))),
@@ -101,9 +117,13 @@ class ProfileScreen extends ConsumerWidget {
               child: const Text('Cancel')),
           FilledButton(
               onPressed: () async {
-                await ref.read(apiProvider).updateProfile(
-                    name: name.text, email: email.text);
-                if (ctx.mounted) Navigator.pop(ctx);
+                try {
+                  await ref.read(apiProvider).updateProfile(
+                      name: name.text, email: email.text);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                } catch (e) {
+                  if (ctx.mounted) showFriendlyError(ctx, e);
+                }
               },
               child: const Text('Save')),
         ],

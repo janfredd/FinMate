@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/api_client.dart';
+import '../../core/format.dart';
 import '../providers/providers.dart';
 import 'shell.dart';
 
@@ -31,8 +33,8 @@ class BudgetScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start, children: [
                     LinearProgressIndicator(value: pct, color: color,
                         minHeight: 8),
-                    Text('${b.spent.toStringAsFixed(0)} / '
-                        '${b.amount.toStringAsFixed(0)} '
+                    Text('${formatRupiah(b.spent)} / '
+                        '${formatRupiah(b.amount)} '
                         '(${b.pct.toStringAsFixed(0)}%)',
                         style: TextStyle(color: color)),
                   ]),
@@ -63,8 +65,11 @@ class BudgetScreen extends ConsumerWidget {
                 items: cats.map((e) => DropdownMenuItem(
                     value: e.id, child: Text(e.name))).toList(),
                 onChanged: (v) => setS(() => catId = v)),
-            TextField(controller: amt, keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Amount')),
+            TextField(controller: amt,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                    labelText: 'Amount', hintText: 'Contoh: 6,78')),
             DropdownButtonFormField<String>(
                 initialValue: period,
                 items: const ['monthly', 'weekly']
@@ -76,18 +81,30 @@ class BudgetScreen extends ConsumerWidget {
                 child: const Text('Cancel')),
             FilledButton(
                 onPressed: () async {
+                  final parsedAmount =
+                      double.tryParse(amt.text.trim().replaceAll(',', '.'));
+                  if (parsedAmount == null || parsedAmount <= 0) {
+                    ScaffoldMessenger.of(c).showSnackBar(const SnackBar(
+                        content: Text(
+                            'Masukkan nominal yang valid, contoh: 6,78')));
+                    return;
+                  }
                   final now = DateTime.now();
                   final start = DateTime(now.year, now.month, 1);
                   final end = DateTime(now.year, now.month + 1, 0);
-                  await ref.read(apiProvider).saveBudget({
-                    'category_id': catId,
-                    'amount': double.parse(amt.text),
-                    'period': period,
-                    'start_date': start.toIso8601String().substring(0, 10),
-                    'end_date': end.toIso8601String().substring(0, 10),
-                  }, b?.id);
-                  refreshAll(ref);
-                  if (c.mounted) Navigator.pop(c);
+                  try {
+                    await ref.read(apiProvider).saveBudget({
+                      'category_id': catId,
+                      'amount': parsedAmount,
+                      'period': period,
+                      'start_date': start.toIso8601String().substring(0, 10),
+                      'end_date': end.toIso8601String().substring(0, 10),
+                    }, b?.id);
+                    refreshAll(ref);
+                    if (c.mounted) Navigator.pop(c);
+                  } catch (e) {
+                    if (c.mounted) showFriendlyError(c, e);
+                  }
                 },
                 child: const Text('Save')),
           ],
