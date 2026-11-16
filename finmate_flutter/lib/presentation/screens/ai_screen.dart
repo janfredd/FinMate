@@ -35,51 +35,11 @@ class _AiState extends ConsumerState<AiScreen> {
   @override
   Widget build(BuildContext context) {
     final msgs = ref.watch(chatProvider);
-    final insights = ref.watch(insightsProvider);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('AI Assistant')),
       body: Column(children: [
-        insights.when(
-          data: (list) => list.isEmpty
-              ? const SizedBox()
-              : Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
-                  child: SoftCard(
-                    padding: const EdgeInsets.all(14),
-                    gradient: LinearGradient(
-                      colors: [
-                        scheme.secondary.withValues(alpha: 0.16),
-                        scheme.primary.withValues(alpha: 0.1),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    shadow: false,
-                    child: Row(
-                      children: [
-                        PlayfulIcon(
-                            icon: Icons.auto_awesome_rounded,
-                            color: scheme.secondary,
-                            size: 40,
-                            iconSize: 20),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Insight: ${list.first['message']}',
-                            style: theme.textTheme.bodySmall,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-          loading: () => const SizedBox(),
-          error: (_, __) => const SizedBox(),
-        ),
         Expanded(
           child: msgs.isEmpty
               ? const EmptyState(

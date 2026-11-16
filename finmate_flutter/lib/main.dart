@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'core/api_client.dart';
+import 'core/notification_service.dart';
 import 'core/theme.dart';
 import 'presentation/providers/providers.dart';
 import 'presentation/screens/shell.dart';
@@ -18,6 +19,7 @@ Future<void> main() async {
   } catch (_) {
     // Run without FCM in dev/emulator.
   }
+  await NotificationService.init();
   runApp(const ProviderScope(child: FinMateApp()));
 }
 

@@ -2,21 +2,47 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../core/format.dart';
+import '../../core/notification_service.dart';
 import '../../core/ui_kit.dart';
 import '../../data/models/models.dart';
 import '../providers/providers.dart';
 import 'shell.dart';
 
 // Summary cards + pie chart + recent transactions.
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardState();
+}
+
+class _DashboardState extends ConsumerState<DashboardScreen> {
+  static bool _insightNotified = false;
+
+  void _notifyInsight(List<Map<String, dynamic>> list) {
+    if (_insightNotified || list.isEmpty) return;
+    final message = list.first['message']?.toString() ?? '';
+    if (message.isEmpty) return;
+    _insightNotified = true;
+    NotificationService.showInsight(message);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final sum = ref.watch(summaryProvider);
     final br = ref.watch(breakdownProvider);
     final tx = ref.watch(txnsProvider);
+    final insights = ref.watch(insightsProvider);
     final scheme = Theme.of(context).colorScheme;
+
+    ref.listen(insightsProvider, (_, next) {
+      if (next.hasValue) _notifyInsight(next.value!);
+    });
+    if (insights.hasValue) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _notifyInsight(insights.value!);
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -66,6 +92,18 @@ class DashboardScreen extends ConsumerWidget {
               loading: () => SizedBox(height: 220, child: loading()),
               error: (e, _) =>
                   errView(e, () => ref.invalidate(summaryProvider)),
+            ),
+            insights.when(
+              data: (list) => list.isEmpty
+                  ? const SizedBox()
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 20),
+                      child: _InsightBanner(
+                        message: list.first['message']?.toString() ?? '',
+                      ),
+                    ),
+              loading: () => const SizedBox(),
+              error: (_, __) => const SizedBox(),
             ),
             const SizedBox(height: 28),
             const SectionHeader(
@@ -289,6 +327,78 @@ class _StatCard extends StatelessWidget {
   }
 }
 
+class _InsightBanner extends StatelessWidget {
+  final String message;
+  const _InsightBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final titleColor = dark ? const Color(0xFFFFE082) : const Color(0xFF7A5B00);
+    final bodyColor = dark
+        ? Colors.white.withValues(alpha: 0.85)
+        : const Color(0xFF6B5400);
+    return SoftCard(
+      padding: const EdgeInsets.all(16),
+      shadow: false,
+      gradient: LinearGradient(
+        colors: dark
+            ? const [Color(0xFF3A3320), Color(0xFF2C2819)]
+            : const [Color(0xFFFFF8E1), Color(0xFFFFF0B8)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: dark ? 0.08 : 0.7),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Text('💡', style: TextStyle(fontSize: 24)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Insight',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: titleColor,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text('✨', style: TextStyle(fontSize: 14)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    height: 1.45,
+                    color: bodyColor,
+                  ),
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SavingsCard extends StatelessWidget {
   final double amount;
   const _SavingsCard({required this.amount});
@@ -297,13 +407,17 @@ class _SavingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final positive = amount >= 0;
+    final accent = positive ? scheme.primary : scheme.error;
     return SoftCard(
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
           PlayfulIcon(
-            icon: Icons.auto_awesome_rounded,
-            color: scheme.primary,
+            icon: positive
+                ? Icons.savings_rounded
+                : Icons.sentiment_dissatisfied_rounded,
+            color: accent,
             size: 54,
             iconSize: 26,
           ),
@@ -324,7 +438,9 @@ class _SavingsCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Terus konsisten ya!',
+                  positive
+                      ? 'Terus konsisten ya!'
+                      : 'Waduh, pengeluaran lebih besar dari pemasukan. Yuk, hemat lagi!',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurface.withValues(alpha: 0.55),
                   ),
@@ -332,7 +448,17 @@ class _SavingsCard extends StatelessWidget {
               ],
             ),
           ),
-          Icon(Icons.emoji_emotions_rounded, color: scheme.primary),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              positive ? '😎' : '☹️',
+              style: const TextStyle(fontSize: 22),
+            ),
+          ),
         ],
       ),
     );
