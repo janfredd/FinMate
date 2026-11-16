@@ -89,6 +89,11 @@ class ApiService {
     return r.data['answer'] as String;
   }
 
+  Future<Map<String, dynamic>> parseVoice(String text) async {
+    final r = await _d.post('/ai/parse-voice', data: {'text': text});
+    return Map<String, dynamic>.from(r.data);
+  }
+
   Future<List<Map<String, dynamic>>> insights({bool refresh = false}) async {
     final r = await _d.get('/insights', queryParameters: {'refresh': refresh});
     return List<Map<String, dynamic>>.from(r.data);

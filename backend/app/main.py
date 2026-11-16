@@ -6,6 +6,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from app.core.config import settings
 from app.core.deps import Base, engine
 from app.models import models  # noqa: F401  (register tables)
+from app.api.routers.ai import router as ai_router
 from app.api.routers.auth import router as auth_router
 from app.api.routers.finance import router as finance_router
 from app.api.routers.insight import router as insight_router
@@ -45,6 +46,8 @@ app.include_router(auth_router, tags=["auth"])
 app.include_router(finance_router, tags=["finance"])
 # Dashboard/budgets/AI/insights/gmail
 app.include_router(insight_router, tags=["insights"])
+# Voice input parsing
+app.include_router(ai_router, tags=["ai"])
 
 @app.get("/health")
 def health():

@@ -77,6 +77,14 @@ class ChatIn(BaseModel):
 class ChatOut(BaseModel):
     answer: str
 
+class VoiceParseIn(BaseModel):
+    text: str = Field(min_length=1, max_length=1000)
+
+class VoiceParseOut(BaseModel):
+    amount: float
+    merchant: str
+    category: str
+
 class InsightOut(BaseModel):
     id: str
     type: str

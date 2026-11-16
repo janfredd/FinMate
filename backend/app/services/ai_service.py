@@ -1,4 +1,5 @@
 """Groq (OpenAI-compatible) API call + proactive insight generation."""
+import json
 import re
 from openai import (AsyncOpenAI, APIConnectionError, APIStatusError,
                     APITimeoutError, AuthenticationError, RateLimitError)
@@ -111,6 +112,79 @@ async def ask_ai(prompt: str) -> str:
     except Exception:
         return ("Maaf, terjadi kesalahan tak terduga saat memproses permintaan AI. "
                 "Silakan coba lagi nanti.")
+
+
+VOICE_SYSTEM_PROMPT = (
+    "Kamu adalah parser transaksi. Ekstrak teks berikut menjadi format JSON "
+    "dengan key: amount (angka saja), merchant (string), dan category (string, "
+    "pilih dari: Food, Transportation, Shopping, Entertainment, Bills, Health, "
+    "Education, Others). Hanya kembalikan JSON murni tanpa markdown."
+)
+VALID_CATEGORIES = ("Food", "Transportation", "Shopping", "Entertainment",
+                    "Bills", "Health", "Education", "Others")
+
+
+def _parse_amount(value: object) -> float:
+    """Normalise numbers like '50.000', 'Rp 50.000', or 50000 into a float."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return max(0.0, float(value))
+    raw = str(value or "").strip().lower()
+    raw = raw.replace("rp", "").replace("idr", "")
+    raw = re.sub(r"[^0-9,.\-]", "", raw)
+    if not raw:
+        return 0.0
+    if "," in raw and "." in raw:
+        raw = raw.replace(".", "").replace(",", ".")
+    elif "," in raw:
+        raw = raw.replace(",", ".")
+    elif raw.count(".") > 1 or (
+            raw.count(".") == 1 and len(raw.split(".")[-1]) == 3):
+        raw = raw.replace(".", "")
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 0.0
+
+
+def _extract_json_object(text: str) -> dict:
+    """Pull the first JSON object out of a model reply, fenced or not."""
+    cleaned = re.sub(r"```(?:json)?", "", text or "")
+    cleaned = cleaned.replace("`", "").strip()
+    start, end = cleaned.find("{"), cleaned.rfind("}")
+    if start == -1 or end <= start:
+        raise ValueError("Parser AI tidak mengembalikan JSON yang valid.")
+    data = json.loads(cleaned[start:end + 1])
+    if not isinstance(data, dict):
+        raise ValueError("Parser AI tidak mengembalikan objek JSON.")
+    return data
+
+
+async def parse_voice_transaction(text: str) -> dict:
+    """Extract {amount, merchant, category} from a spoken transaction phrase."""
+    if not settings.GROQ_API_KEY:
+        raise ValueError("Layanan AI belum dikonfigurasi (GROQ_API_KEY kosong).")
+
+    client = _build_client()
+    completion = await client.chat.completions.create(
+        model=settings.GROQ_MODEL,
+        messages=[
+            {"role": "system", "content": VOICE_SYSTEM_PROMPT},
+            {"role": "user", "content": text},
+        ],
+        temperature=0,
+        max_tokens=256,
+    )
+    choices = getattr(completion, "choices", None) or []
+    if not choices:
+        raise ValueError("AI tidak memberikan respons.")
+    data = _extract_json_object(choices[0].message.content or "")
+
+    amount = _parse_amount(data.get("amount", 0))
+    merchant = str(data.get("merchant") or "").strip() or "Unknown"
+    category = str(data.get("category") or "").strip()
+    matched = next((c for c in VALID_CATEGORIES
+                    if c.lower() == category.lower()), "Others")
+    return {"amount": amount, "merchant": merchant, "category": matched}
 
 
 def build_context(db: Session, user_id: str, limit: int = 100) -> str:

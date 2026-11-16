@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import '../../core/receipt_parser.dart';
 import '../../core/api_client.dart';
 import '../../core/ui_kit.dart';
@@ -27,6 +28,10 @@ class _AddState extends ConsumerState<AddTxnScreen> {
   bool busy = false, scanning = false;
   String source = 'Manual';
 
+  final SpeechToText _speech = SpeechToText();
+  bool _listening = false, _parsingVoice = false, _voiceSubmitted = false;
+  String _voiceTranscript = '';
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +43,151 @@ class _AddState extends ConsumerState<AddTxnScreen> {
       date = DateTime.tryParse(e.date ?? '') ?? DateTime.now();
     }
     if (widget.scanFirst) Future.microtask(_scan);
+  }
+
+  @override
+  void dispose() {
+    _speech.cancel();
+    amount.dispose();
+    merchant.dispose();
+    note.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggleVoice() async {
+    if (_listening) {
+      await _speech.stop();
+      if (mounted) setState(() => _listening = false);
+      await _submitVoice();
+    } else {
+      await _startVoice();
+    }
+  }
+
+  Future<void> _startVoice() async {
+    if (_parsingVoice) return;
+    final available = await _speech.initialize(
+      onStatus: (status) {
+        if (!mounted) return;
+        if (status == 'done' || status == 'notListening') {
+          if (_listening) setState(() => _listening = false);
+          _submitVoice();
+        }
+      },
+      onError: (error) {
+        if (!mounted) return;
+        setState(() => _listening = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Input suara gagal: ${error.errorMsg}'),
+        ));
+      },
+    );
+    if (!available) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+            'Izin mikrofon ditolak atau layanan suara tidak tersedia.'),
+      ));
+      return;
+    }
+
+    String? localeId;
+    try {
+      final locales = await _speech.locales();
+      for (final l in locales) {
+        if (l.localeId.toLowerCase().startsWith('id')) {
+          localeId = l.localeId;
+          break;
+        }
+      }
+    } catch (_) {
+      // Fall back to the device default locale.
+    }
+
+    _voiceTranscript = '';
+    _voiceSubmitted = false;
+    if (mounted) setState(() => _listening = true);
+    await _speech.listen(
+      onResult: (result) {
+        if (!mounted) return;
+        _voiceTranscript = result.recognizedWords;
+        setState(() {});
+        if (result.finalResult) {
+          _speech.stop();
+          setState(() => _listening = false);
+          _submitVoice();
+        }
+      },
+      listenOptions: SpeechListenOptions(
+        localeId: localeId,
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 3),
+        partialResults: true,
+        cancelOnError: true,
+        listenMode: ListenMode.dictation,
+      ),
+    );
+  }
+
+  Future<void> _submitVoice() async {
+    if (_parsingVoice || _voiceSubmitted) return;
+    final text = _voiceTranscript.trim();
+    if (text.isEmpty) {
+      if (mounted) setState(() => _listening = false);
+      return;
+    }
+    _voiceSubmitted = true;
+    if (mounted) setState(() => _parsingVoice = true);
+    try {
+      final parsed = await ref.read(apiProvider).parseVoice(text);
+      final rawAmount = parsed['amount'];
+      final parsedAmount = rawAmount is num
+          ? rawAmount.toDouble()
+          : double.tryParse('$rawAmount') ?? 0;
+      final parsedMerchant = (parsed['merchant'] ?? '').toString().trim();
+      final parsedCategory = (parsed['category'] ?? '').toString().trim();
+
+      List<Category> cats = const [];
+      try {
+        cats = await ref.read(categoriesProvider.future);
+      } catch (_) {
+        // Keep amount/merchant filled even if categories failed to load.
+      }
+      String? matched;
+      for (final c in cats) {
+        if (c.name.toLowerCase() == parsedCategory.toLowerCase()) {
+          matched = c.id;
+          break;
+        }
+      }
+      if (matched == null) {
+        for (final c in cats) {
+          if (c.name.toLowerCase() == 'others') {
+            matched = c.id;
+            break;
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        if (parsedAmount > 0) {
+          amount.text = parsedAmount == parsedAmount.roundToDouble()
+              ? parsedAmount.toStringAsFixed(0)
+              : parsedAmount.toString();
+        }
+        if (parsedMerchant.isNotEmpty) merchant.text = parsedMerchant;
+        if (matched != null) catId = matched;
+        source = 'Voice';
+        _voiceTranscript = '';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Isian otomatis dari suara. Cek lagi ya.')));
+    } catch (e) {
+      if (mounted) showFriendlyError(context, e);
+    } finally {
+      if (mounted) setState(() => _parsingVoice = false);
+    }
   }
 
   Future<void> _scan() async {
@@ -157,6 +307,20 @@ class _AddState extends ConsumerState<AddTxnScreen> {
         title: Text(widget.edit != null ? 'Edit transaksi' : 'Tambah transaksi'),
         actions: [
           Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: IconButton(
+              tooltip: _listening ? 'Berhenti merekam' : 'Input suara',
+              style: IconButton.styleFrom(
+                backgroundColor: (_listening ? scheme.error : scheme.secondary)
+                    .withValues(alpha: 0.12),
+                foregroundColor:
+                    _listening ? scheme.error : scheme.secondary,
+              ),
+              icon: Icon(_listening ? Icons.stop_rounded : Icons.mic),
+              onPressed: _toggleVoice,
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.only(right: 12),
             child: IconButton(
               tooltip: 'Scan struk',
@@ -182,6 +346,60 @@ class _AddState extends ConsumerState<AddTxnScreen> {
               ),
               const SizedBox(height: 10),
               Text('Membaca struk...', style: theme.textTheme.bodySmall),
+              const SizedBox(height: 16),
+            ],
+            if (_listening || _parsingVoice) ...[
+              SoftCard(
+                padding: const EdgeInsets.all(14),
+                shadow: false,
+                gradient: LinearGradient(
+                  colors: [
+                    scheme.secondary.withValues(alpha: 0.14),
+                    scheme.primary.withValues(alpha: 0.1),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                child: Row(
+                  children: [
+                    PlayfulIcon(
+                      icon: _listening
+                          ? Icons.mic_rounded
+                          : Icons.auto_awesome_rounded,
+                      color: _listening ? scheme.error : scheme.primary,
+                      size: 42,
+                      iconSize: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _listening
+                                ? 'Mendengarkan...'
+                                : 'Memproses suara...',
+                            style: theme.textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          if (_voiceTranscript.isNotEmpty)
+                            Text(
+                              '"$_voiceTranscript"',
+                              style: theme.textTheme.bodySmall,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (_listening)
+                      TextButton(
+                        onPressed: _toggleVoice,
+                        child: const Text('Selesai'),
+                      ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 16),
             ],
             SoftCard(
