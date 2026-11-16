@@ -6,7 +6,7 @@ from app.models.models import Transaction, Budget, Category, Insight, OAuthToken
 from app.schemas.schemas import (BudgetIn, BudgetOut, SummaryOut, BreakdownItem,
                                  ChatIn, ChatOut, InsightOut)
 from app.services.budget_service import spend_for, check_and_notify
-from app.services.ai_service import ask_gemini, build_context, generate_proactive_insights
+from app.services.ai_service import ask_ai, build_context, generate_proactive_insights
 from app.services.gmail_service import auth_url, exchange_code, save_tokens, import_unread
 import uuid
 
@@ -74,10 +74,11 @@ def update_budget(bid: str, body: BudgetIn, uid: str = Depends(get_current_user_
 async def ai_chat(body: ChatIn, uid: str = Depends(get_current_user_id),
                   db: Session = Depends(get_db)):
     ctx = build_context(db, uid)
-    prompt = ("You are a financial assistant. Based on these transactions "
-              f"(date | type | amount | category | merchant | note):\n{ctx}\n\n"
-              f"Answer concisely: {body.question}")
-    answer = await ask_gemini(prompt)
+    prompt = ("Konteks transaksi pengguna "
+              "(date | type | amount | category | merchant | note):\n"
+              f"{ctx}\n\n"
+              f"Pertanyaan pengguna: {body.question}")
+    answer = await ask_ai(prompt)
     db.add(Insight(user_id=uid, type="chat",
                    message=f"Q: {body.question[:500]}\nA: {answer[:2000]}"))
     db.commit()

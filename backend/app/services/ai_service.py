@@ -1,67 +1,133 @@
-"""Gemini API call + proactive insight generation."""
-import httpx
+"""Groq (OpenAI-compatible) API call + proactive insight generation."""
+import re
+from openai import (AsyncOpenAI, APIConnectionError, APIStatusError,
+                    APITimeoutError, AuthenticationError, RateLimitError)
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date, timedelta
 from app.core.config import settings
 from app.models.models import Transaction, Category, Insight
 
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-GEMINI_TIMEOUT = 60
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_TIMEOUT = 60
 
-async def ask_gemini(prompt: str) -> str:
-    if not settings.GEMINI_API_KEY:
-        return "(Gemini API key not configured) Echo of prompt:\n" + prompt[:2000]
+SYSTEM_PROMPT = (
+    "IDENTITAS DIRI: Kamu adalah FinMate, asisten keuangan pintar yang ada DI DALAM "
+    "aplikasi FinMate. Kamu bukan chatbot terpisah dan bukan aplikasi lain. "
+    "JANGAN pernah menyarankan pengguna memakai aplikasi lain, spreadsheet, buku catatan, "
+    "atau mencatat manual di luar FinMate. Kalau pengguna butuh mencatat, mengatur budget, "
+    "atau melihat riwayat, arahkan mereka ke fitur yang ada di FinMate ini, misalnya: "
+    "'Coba atur budget harianmu di menu Budget FinMate' atau 'Catat pengeluaranmu di sini "
+    "biar aku bisa bantu analisa'. "
+    "Menu yang tersedia di FinMate: Dashboard (ringkasan keuangan), Transactions "
+    "(catat dan lihat transaksi), Budget, AI Assistant, dan Profile. Sebut nama menu "
+    "persis seperti itu, jangan mengarang nama menu lain. "
+    "PERSONA: Pakai gaya 'aku-kamu' yang santai, suportif, solutif, dan natural seperti "
+    "teman ngobrol. Boleh sedikit Gen Z dengan kata seperti 'biar', 'banget', atau 'nih' "
+    "secukupnya, tapi jangan berlebihan atau alay. Jangan mulai dengan basa-basi klise "
+    "seperti 'Tentu!', 'Sebagai AI', atau 'Pertanyaan yang bagus'. Jawab langsung ke inti "
+    "di kalimat pertama, lalu jelaskan singkat. "
+    "FORMAT TEKS: DILARANG KERAS memakai simbol markdown seperti **, *, #, _, atau tabel. "
+    "Antarmuka aplikasi tidak mendukung format markdown. Cukup pakai teks biasa, spasi, "
+    "enter untuk paragraf baru, dan simbol bullet biasa '•' kalau ada beberapa poin. "
+    "Tulis nominal dengan format Rp dan pemisah ribuan (contoh: Rp1.250.000). "
+    "Buat jawaban mudah dibaca: paragraf pendek (maksimal 3 baris), cukup 3-5 poin atau "
+    "3-4 paragraf, jangan bertele-tele. Emoji maksimal 1-2 dan hanya kalau terasa natural. "
+    "Gunakan hanya data dari konteks transaksi; jangan mengarang angka atau transaksi. "
+    "Kalau data belum ada, bilang jujur dengan santai dan sarankan fitur FinMate yang "
+    "bisa dipakai. Akhiri dengan satu saran praktis atau pertanyaan lanjutan."
+)
 
-    model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash-latest')
 
-    # Paksa ke versi -latest agar kompatibel dengan SDK baru
-    if model_name in ['gemini-1.5-flash', 'gemini-1.5-pro']:
-        model_name = 'gemini-1.5-flash-latest'
+def _clean_output(text: str) -> str:
+    """Strip markdown so Flutter's plain Text widget stays readable."""
+    text = re.sub(r"```[a-zA-Z]*", "", text)
+    text = text.replace("`", "")
+    text = re.sub(r"^\s*#{1,6}\s*", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*[-*+]\s+", "• ", text, flags=re.MULTILINE)
+    text = re.sub(r"\[(.+?)\]\((.+?)\)", r"\1 (\2)", text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"__(.+?)__", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"\1", text)
+    text = re.sub(r"\*(.+?)\*", r"\1", text)
+    text = text.replace("*", "")
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _build_client() -> AsyncOpenAI:
+    return AsyncOpenAI(
+        api_key=settings.GROQ_API_KEY,
+        base_url=GROQ_BASE_URL,
+        timeout=GROQ_TIMEOUT,
+    )
+
+
+async def ask_ai(prompt: str) -> str:
+    if not settings.GROQ_API_KEY:
+        return ("Maaf, layanan AI belum dikonfigurasi. "
+                "Silakan hubungi admin untuk mengatur GROQ_API_KEY.")
 
     try:
-        async with httpx.AsyncClient(timeout=GEMINI_TIMEOUT) as client:
-            r = await client.post(
-                f"{GEMINI_API_URL}/{model_name}:generateContent",
-                params={"key": settings.GEMINI_API_KEY},
-                json={"contents": [{"parts": [{"text": prompt}]}]},
-            )
+        client = _build_client()
+        completion = await client.chat.completions.create(
+            model=settings.GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+            max_tokens=1024,
+        )
 
-        # Tangani status non-200 agar server tidak crash (HTTP 500)
-        if r.status_code != 200:
-            return f"Error dari Gemini ({r.status_code}): {r.text}"
+        choices = getattr(completion, "choices", None) or []
+        if not choices:
+            return "Maaf, AI tidak memberikan respons. Silakan coba lagi."
 
-        data = r.json()
-        candidates = data.get("candidates") or []
-        if not candidates:
-            return f"Error dari Gemini: respons tidak berisi candidates: {data}"
-
-        parts = candidates[0].get("content", {}).get("parts") or []
-        text = "".join(p.get("text", "") for p in parts).strip()
+        text = (choices[0].message.content or "").strip()
         if not text:
-            return f"Error dari Gemini: respons kosong: {data}"
+            return "Maaf, AI memberikan respons kosong. Silakan coba lagi."
+        return _clean_output(text)
 
-        return text
-
-    except httpx.TimeoutException:
-        return "Error dari Gemini: permintaan timeout setelah 60 detik."
-    except httpx.RequestError as e:
-        return f"Error dari Gemini: gagal terhubung ke API: {str(e)}"
-    except Exception as e:
-        return f"Error dari Gemini: {str(e)}"
+    except AuthenticationError:
+        return ("Maaf, kunci API Groq tidak valid. "
+                "Silakan periksa kembali konfigurasi GROQ_API_KEY.")
+    except RateLimitError:
+        return ("Maaf, kuota penggunaan AI sedang penuh atau batas permintaan "
+                "terlampaui. Silakan coba beberapa saat lagi.")
+    except APITimeoutError:
+        return (f"Maaf, permintaan ke layanan AI timeout setelah {GROQ_TIMEOUT} detik. "
+                "Silakan coba lagi.")
+    except APIConnectionError:
+        return ("Maaf, gagal terhubung ke layanan AI Groq. "
+                "Periksa koneksi internet dan coba lagi.")
+    except APIStatusError as e:
+        if e.status_code == 404:
+            return (f"Maaf, model AI '{settings.GROQ_MODEL}' tidak tersedia. "
+                    "Silakan periksa konfigurasi GROQ_MODEL.")
+        return (f"Maaf, layanan AI sedang bermasalah (status {e.status_code}). "
+                "Silakan coba lagi nanti.")
+    except Exception:
+        return ("Maaf, terjadi kesalahan tak terduga saat memproses permintaan AI. "
+                "Silakan coba lagi nanti.")
 
 
 def build_context(db: Session, user_id: str, limit: int = 100) -> str:
     txns = (db.query(Transaction).filter(Transaction.user_id == user_id)
             .order_by(Transaction.date.desc()).limit(limit).all())
     if not txns:
-        return "No transactions recorded yet."
+        return "Belum ada transaksi yang tercatat."
     cat = {c.id: c.name for c in db.query(Category).all()}
     lines = []
     for t in txns:
         lines.append(f"{t.date} | {t.type} | {float(t.amount):.2f} | "
                      f"{cat.get(t.category_id, '-')} | {t.merchant or '-'} | {t.note or ''}")
     return "\n".join(lines)
+
+
+def _format_rupiah(value: float) -> str:
+    return "Rp" + f"{float(value):,.0f}".replace(",", ".")
 
 
 def generate_proactive_insights(db: Session, user_id: str) -> list[str]:
@@ -82,8 +148,11 @@ def generate_proactive_insights(db: Session, user_id: str) -> list[str]:
             Transaction.date >= prev_start, Transaction.date < cur_start).scalar() or 0
         if prev > 0 and cur > prev * 1.5:
             pct = (cur - prev) / prev * 100
-            msgs.append(f"Unusual spike: {name} spending rose {pct:.0f}% "
-                        f"({float(prev):.0f} → {float(cur):.0f}) in the last 30 days.")
+            msgs.append(
+                f"Pengeluaran {name} kamu naik {pct:.0f}% dalam 30 hari terakhir "
+                f"(dari {_format_rupiah(prev)} jadi {_format_rupiah(cur)}). "
+                "Mungkin ada yang perlu dicek lagi, ya."
+            )
     total = db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
         Transaction.user_id == user_id, Transaction.type == "expense",
         Transaction.date >= cur_start).scalar() or 0
@@ -94,9 +163,13 @@ def generate_proactive_insights(db: Session, user_id: str) -> list[str]:
                .group_by(Transaction.category_id).order_by(func.sum(Transaction.amount).desc())
                .first())
         if top and top[1]:
-            msgs.append(f"Saving opportunity: your top category is "
-                        f"{cat_name.get(top[0], '?')} ({float(top[1]):.0f}). "
-                        f"Cutting 10% could save {float(top[1]) * 0.1:.0f} next month.")
+            name = cat_name.get(top[0], "kategori ini")
+            msgs.append(
+                f"Kategori paling besar kamu bulan ini adalah {name} "
+                f"({_format_rupiah(top[1])}). Kalau kamu potong 10% saja, "
+                f"kamu bisa hemat sekitar {_format_rupiah(float(top[1]) * 0.1)} "
+                "bulan depan."
+            )
     for m in msgs:
         db.add(Insight(user_id=user_id, type="proactive", message=m))
     db.commit()
