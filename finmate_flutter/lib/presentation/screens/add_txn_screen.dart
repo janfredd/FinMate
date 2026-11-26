@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 import '../../core/receipt_parser.dart';
 import '../../core/api_client.dart';
 import '../../core/ui_kit.dart';
@@ -14,7 +13,21 @@ import '../providers/providers.dart';
 class AddTxnScreen extends ConsumerStatefulWidget {
   final Txn? edit;
   final bool scanFirst;
-  const AddTxnScreen({super.key, this.edit, this.scanFirst = false});
+  final double? initialAmount;
+  final String? initialMerchant;
+  final String? initialCategoryId;
+  final String? initialType;
+  final String? initialSource;
+  const AddTxnScreen({
+    super.key,
+    this.edit,
+    this.scanFirst = false,
+    this.initialAmount,
+    this.initialMerchant,
+    this.initialCategoryId,
+    this.initialType,
+    this.initialSource,
+  });
   @override
   ConsumerState<AddTxnScreen> createState() => _AddState();
 }
@@ -22,172 +35,46 @@ class AddTxnScreen extends ConsumerStatefulWidget {
 class _AddState extends ConsumerState<AddTxnScreen> {
   String type = 'expense';
   final amount = TextEditingController(),
-      merchant = TextEditingController(), note = TextEditingController();
+      merchant = TextEditingController(),
+      note = TextEditingController();
   String? catId;
   DateTime date = DateTime.now();
   bool busy = false, scanning = false;
   String source = 'Manual';
-
-  final SpeechToText _speech = SpeechToText();
-  bool _listening = false, _parsingVoice = false, _voiceSubmitted = false;
-  String _voiceTranscript = '';
 
   @override
   void initState() {
     super.initState();
     final e = widget.edit;
     if (e != null) {
-      type = e.type; amount.text = e.amount.toString();
-      merchant.text = e.merchant ?? ''; note.text = e.note ?? '';
-      catId = e.categoryId; source = e.source ?? 'Manual';
+      type = e.type;
+      amount.text = e.amount.toString();
+      merchant.text = e.merchant ?? '';
+      note.text = e.note ?? '';
+      catId = e.categoryId;
+      source = e.source ?? 'Manual';
       date = DateTime.tryParse(e.date ?? '') ?? DateTime.now();
+    } else {
+      final initialAmount = widget.initialAmount;
+      if (initialAmount != null && initialAmount > 0) {
+        amount.text = initialAmount == initialAmount.roundToDouble()
+            ? initialAmount.toStringAsFixed(0)
+            : initialAmount.toString();
+      }
+      merchant.text = widget.initialMerchant ?? '';
+      catId = widget.initialCategoryId;
+      type = widget.initialType ?? type;
+      source = widget.initialSource ?? source;
     }
     if (widget.scanFirst) Future.microtask(_scan);
   }
 
   @override
   void dispose() {
-    _speech.cancel();
     amount.dispose();
     merchant.dispose();
     note.dispose();
     super.dispose();
-  }
-
-  Future<void> _toggleVoice() async {
-    if (_listening) {
-      await _speech.stop();
-      if (mounted) setState(() => _listening = false);
-      await _submitVoice();
-    } else {
-      await _startVoice();
-    }
-  }
-
-  Future<void> _startVoice() async {
-    if (_parsingVoice) return;
-    final available = await _speech.initialize(
-      onStatus: (status) {
-        if (!mounted) return;
-        if (status == 'done' || status == 'notListening') {
-          if (_listening) setState(() => _listening = false);
-          _submitVoice();
-        }
-      },
-      onError: (error) {
-        if (!mounted) return;
-        setState(() => _listening = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Input suara gagal: ${error.errorMsg}'),
-        ));
-      },
-    );
-    if (!available) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-            'Izin mikrofon ditolak atau layanan suara tidak tersedia.'),
-      ));
-      return;
-    }
-
-    String? localeId;
-    try {
-      final locales = await _speech.locales();
-      for (final l in locales) {
-        if (l.localeId.toLowerCase().startsWith('id')) {
-          localeId = l.localeId;
-          break;
-        }
-      }
-    } catch (_) {
-      // Fall back to the device default locale.
-    }
-
-    _voiceTranscript = '';
-    _voiceSubmitted = false;
-    if (mounted) setState(() => _listening = true);
-    await _speech.listen(
-      onResult: (result) {
-        if (!mounted) return;
-        _voiceTranscript = result.recognizedWords;
-        setState(() {});
-        if (result.finalResult) {
-          _speech.stop();
-          setState(() => _listening = false);
-          _submitVoice();
-        }
-      },
-      listenOptions: SpeechListenOptions(
-        localeId: localeId,
-        listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 3),
-        partialResults: true,
-        cancelOnError: true,
-        listenMode: ListenMode.dictation,
-      ),
-    );
-  }
-
-  Future<void> _submitVoice() async {
-    if (_parsingVoice || _voiceSubmitted) return;
-    final text = _voiceTranscript.trim();
-    if (text.isEmpty) {
-      if (mounted) setState(() => _listening = false);
-      return;
-    }
-    _voiceSubmitted = true;
-    if (mounted) setState(() => _parsingVoice = true);
-    try {
-      final parsed = await ref.read(apiProvider).parseVoice(text);
-      final rawAmount = parsed['amount'];
-      final parsedAmount = rawAmount is num
-          ? rawAmount.toDouble()
-          : double.tryParse('$rawAmount') ?? 0;
-      final parsedMerchant = (parsed['merchant'] ?? '').toString().trim();
-      final parsedCategory = (parsed['category'] ?? '').toString().trim();
-
-      List<Category> cats = const [];
-      try {
-        cats = await ref.read(categoriesProvider.future);
-      } catch (_) {
-        // Keep amount/merchant filled even if categories failed to load.
-      }
-      String? matched;
-      for (final c in cats) {
-        if (c.name.toLowerCase() == parsedCategory.toLowerCase()) {
-          matched = c.id;
-          break;
-        }
-      }
-      if (matched == null) {
-        for (final c in cats) {
-          if (c.name.toLowerCase() == 'others') {
-            matched = c.id;
-            break;
-          }
-        }
-      }
-
-      if (!mounted) return;
-      setState(() {
-        if (parsedAmount > 0) {
-          amount.text = parsedAmount == parsedAmount.roundToDouble()
-              ? parsedAmount.toStringAsFixed(0)
-              : parsedAmount.toString();
-        }
-        if (parsedMerchant.isNotEmpty) merchant.text = parsedMerchant;
-        if (matched != null) catId = matched;
-        source = 'Voice';
-        _voiceTranscript = '';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Isian otomatis dari suara. Cek lagi ya.')));
-    } catch (e) {
-      if (mounted) showFriendlyError(context, e);
-    } finally {
-      if (mounted) setState(() => _parsingVoice = false);
-    }
   }
 
   Future<void> _scan() async {
@@ -202,8 +89,8 @@ class _AddState extends ConsumerState<AddTxnScreen> {
               ListTile(
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18)),
-                leading:
-                    PlayfulIcon(icon: Icons.camera_alt_rounded, color: scheme.primary),
+                leading: PlayfulIcon(
+                    icon: Icons.camera_alt_rounded, color: scheme.primary),
                 title: const Text('Kamera'),
                 subtitle: const Text('Ambil foto struk atau screenshot'),
                 onTap: () => Navigator.pop(ctx, ImageSource.camera),
@@ -259,16 +146,20 @@ class _AddState extends ConsumerState<AddTxnScreen> {
         double.tryParse(amount.text.trim().replaceAll(',', '.'));
     if (parsedAmount == null || parsedAmount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Masukkan nominal yang valid, contoh: 6,78 atau 6.78')));
+          content:
+              Text('Masukkan nominal yang valid, contoh: 6,78 atau 6.78')));
       return;
     }
     setState(() => busy = true);
     try {
       final body = {
-        'type': type, 'amount': parsedAmount,
-        'category_id': catId, 'date': date.toIso8601String().substring(0, 10),
+        'type': type,
+        'amount': parsedAmount,
+        'category_id': catId,
+        'date': date.toIso8601String().substring(0, 10),
         'merchant': merchant.text.isEmpty ? null : merchant.text,
-        'note': note.text.isEmpty ? null : note.text, 'source': source,
+        'note': note.text.isEmpty ? null : note.text,
+        'source': source,
       };
       final api = ref.read(apiProvider);
       if (widget.edit != null) {
@@ -304,22 +195,9 @@ class _AddState extends ConsumerState<AddTxnScreen> {
     final scheme = theme.colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.edit != null ? 'Edit transaksi' : 'Tambah transaksi'),
+        title:
+            Text(widget.edit != null ? 'Edit transaksi' : 'Tambah transaksi'),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: IconButton(
-              tooltip: _listening ? 'Berhenti merekam' : 'Input suara',
-              style: IconButton.styleFrom(
-                backgroundColor: (_listening ? scheme.error : scheme.secondary)
-                    .withValues(alpha: 0.12),
-                foregroundColor:
-                    _listening ? scheme.error : scheme.secondary,
-              ),
-              icon: Icon(_listening ? Icons.stop_rounded : Icons.mic),
-              onPressed: _toggleVoice,
-            ),
-          ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: IconButton(
@@ -346,60 +224,6 @@ class _AddState extends ConsumerState<AddTxnScreen> {
               ),
               const SizedBox(height: 10),
               Text('Membaca struk...', style: theme.textTheme.bodySmall),
-              const SizedBox(height: 16),
-            ],
-            if (_listening || _parsingVoice) ...[
-              SoftCard(
-                padding: const EdgeInsets.all(14),
-                shadow: false,
-                gradient: LinearGradient(
-                  colors: [
-                    scheme.secondary.withValues(alpha: 0.14),
-                    scheme.primary.withValues(alpha: 0.1),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                child: Row(
-                  children: [
-                    PlayfulIcon(
-                      icon: _listening
-                          ? Icons.mic_rounded
-                          : Icons.auto_awesome_rounded,
-                      color: _listening ? scheme.error : scheme.primary,
-                      size: 42,
-                      iconSize: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _listening
-                                ? 'Mendengarkan...'
-                                : 'Memproses suara...',
-                            style: theme.textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                          if (_voiceTranscript.isNotEmpty)
-                            Text(
-                              '"$_voiceTranscript"',
-                              style: theme.textTheme.bodySmall,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (_listening)
-                      TextButton(
-                        onPressed: _toggleVoice,
-                        child: const Text('Selesai'),
-                      ),
-                  ],
-                ),
-              ),
               const SizedBox(height: 16),
             ],
             SoftCard(
@@ -460,7 +284,8 @@ class _AddState extends ConsumerState<AddTxnScreen> {
                       onChanged: (v) => setState(() => catId = v),
                     ),
                     loading: () => const SizedBox(
-                        height: 56, child: Center(child: LinearProgressIndicator())),
+                        height: 56,
+                        child: Center(child: LinearProgressIndicator())),
                     error: (e, _) {
                       final message = friendlyError(e);
                       return message.isEmpty
@@ -532,8 +357,7 @@ class _AddState extends ConsumerState<AddTxnScreen> {
             ),
             const SizedBox(height: 8),
             Center(
-              child: Text('Sumber: $source',
-                  style: theme.textTheme.bodySmall),
+              child: Text('Sumber: $source', style: theme.textTheme.bodySmall),
             ),
           ],
         ),

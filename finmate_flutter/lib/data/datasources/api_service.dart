@@ -17,7 +17,8 @@ class ApiService {
   }
 
   Future<String> login(String email, String pw) async {
-    final r = await _d.post('/auth/login', data: {'email': email, 'password': pw});
+    final r =
+        await _d.post('/auth/login', data: {'email': email, 'password': pw});
     final t = r.data['access_token'] as String;
     await client.saveToken(t);
     return t;
@@ -54,12 +55,18 @@ class ApiService {
     return (r.data as List).map((e) => Txn.fromJson(e)).toList();
   }
 
-  Future<List<Txn>> search({String q = '', String? type, String? categoryId,
-      String? start, String? end}) async {
+  Future<List<Txn>> search(
+      {String q = '',
+      String? type,
+      String? categoryId,
+      String? start,
+      String? end}) async {
     final r = await _d.get('/transactions/search', queryParameters: {
-      'q': q, if (type != null) 'type': type,
+      'q': q,
+      if (type != null) 'type': type,
       if (categoryId != null) 'category_id': categoryId,
-      if (start != null) 'start': start, if (end != null) 'end': end,
+      if (start != null) 'start': start,
+      if (end != null) 'end': end,
     });
     return (r.data as List).map((e) => Txn.fromJson(e)).toList();
   }
@@ -81,8 +88,9 @@ class ApiService {
     return (r.data as List).map((e) => Budget.fromJson(e)).toList();
   }
 
-  Future<void> saveBudget(Map<String, dynamic> body, [String? id]) =>
-      id == null ? _d.post('/budgets', data: body) : _d.put('/budgets/$id', data: body);
+  Future<void> saveBudget(Map<String, dynamic> body, [String? id]) => id == null
+      ? _d.post('/budgets', data: body)
+      : _d.put('/budgets/$id', data: body);
 
   Future<String> chat(String q) async {
     final r = await _d.post('/ai/chat', data: {'question': q});
@@ -98,10 +106,4 @@ class ApiService {
     final r = await _d.get('/insights', queryParameters: {'refresh': refresh});
     return List<Map<String, dynamic>>.from(r.data);
   }
-
-  Future<String> gmailConnect() async =>
-      (await _d.post('/oauth/gmail/connect')).data['auth_url'] as String;
-  Future<void> gmailRevoke() => _d.post('/oauth/gmail/revoke');
-  Future<int> gmailImport() async =>
-      (await _d.post('/gmail/import')).data['imported'] as int? ?? 0;
 }

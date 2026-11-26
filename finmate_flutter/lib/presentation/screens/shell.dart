@@ -16,7 +16,14 @@ class RootGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final logged = ref.watch(authStateProvider);
-    return logged ? const HomeShell() : const AuthScreen();
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 320),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: logged
+          ? const HomeShell(key: ValueKey('home'))
+          : const AuthScreen(key: ValueKey('auth')),
+    );
   }
 }
 
@@ -29,12 +36,34 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int idx = 0;
   final screens = const [
-    DashboardScreen(), TransactionsScreen(), BudgetScreen(), AiScreen(), ProfileScreen()
+    DashboardScreen(),
+    TransactionsScreen(),
+    BudgetScreen(),
+    AiScreen(),
+    ProfileScreen()
   ];
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: screens[idx],
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 280),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          final slide = Tween<Offset>(
+            begin: const Offset(0.04, 0),
+            end: Offset.zero,
+          ).animate(animation);
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(position: slide, child: child),
+          );
+        },
+        child: KeyedSubtree(
+          key: ValueKey(idx),
+          child: screens[idx],
+        ),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: idx,
         onDestinationSelected: (i) => setState(() => idx = i),

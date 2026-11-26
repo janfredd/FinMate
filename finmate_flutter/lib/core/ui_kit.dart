@@ -1,4 +1,107 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+/// Scales its child down slightly while pressed, then springs back.
+/// Uses [Listener] so it never steals taps from the wrapped widget.
+class PressableScale extends StatefulWidget {
+  final Widget child;
+  final double scale;
+  final Duration duration;
+
+  const PressableScale({
+    super.key,
+    required this.child,
+    this.scale = 0.96,
+    this.duration = const Duration(milliseconds: 120),
+  });
+
+  @override
+  State<PressableScale> createState() => _PressableScaleState();
+}
+
+class _PressableScaleState extends State<PressableScale> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (_) => _setPressed(true),
+      onPointerUp: (_) => _setPressed(false),
+      onPointerCancel: (_) => _setPressed(false),
+      child: AnimatedScale(
+        scale: _pressed ? widget.scale : 1,
+        duration: widget.duration,
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Fade + slide-up entrance animation, with an optional stagger [delay].
+class FadeSlideIn extends StatefulWidget {
+  final Widget child;
+  final Duration delay;
+  final Duration duration;
+  final double offsetY;
+
+  const FadeSlideIn({
+    super.key,
+    required this.child,
+    this.delay = Duration.zero,
+    this.duration = const Duration(milliseconds: 380),
+    this.offsetY = 16,
+  });
+
+  @override
+  State<FadeSlideIn> createState() => _FadeSlideInState();
+}
+
+class _FadeSlideInState extends State<FadeSlideIn>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _fade;
+  late final Animation<Offset> _slide;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: widget.duration);
+    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _slide = Tween<Offset>(
+      begin: Offset(0, widget.offsetY),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    ));
+    _timer = Timer(widget.delay, () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(position: _slide, child: widget.child),
+    );
+  }
+}
 
 class SoftCard extends StatelessWidget {
   final Widget child;
@@ -64,7 +167,7 @@ class GradientPillButton extends StatelessWidget {
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
     );
-    return AnimatedOpacity(
+    final content = AnimatedOpacity(
       duration: const Duration(milliseconds: 180),
       opacity: onPressed == null ? 0.55 : 1,
       child: Container(
@@ -118,6 +221,7 @@ class GradientPillButton extends StatelessWidget {
         ),
       ),
     );
+    return onPressed == null ? content : PressableScale(child: content);
   }
 }
 

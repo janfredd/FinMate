@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/ui_kit.dart';
 import '../providers/providers.dart';
 import 'shell.dart';
 
-// Profile: user info, Gmail connect/revoke, edit, logout, delete.
+// Profile: user info, edit, logout, delete.
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -23,13 +22,15 @@ class ProfileScreen extends ConsumerWidget {
         builder: (_, snap) {
           if (!snap.hasData) {
             return snap.hasError
-                ? errView(snap.error!, () => (context as Element).markNeedsBuild())
+                ? errView(
+                    snap.error!, () => (context as Element).markNeedsBuild())
                 : loading();
           }
           final p = snap.data!;
           final displayName = (p['name'] ?? p['email'] ?? 'FinMate').toString();
           final email = (p['email'] ?? '').toString();
-          final initial = displayName.isEmpty ? 'F' : displayName[0].toUpperCase();
+          final initial =
+              displayName.isEmpty ? 'F' : displayName[0].toUpperCase();
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
             children: [
@@ -77,7 +78,7 @@ class ProfileScreen extends ConsumerWidget {
               const SizedBox(height: 20),
               const SectionHeader(
                 title: 'Akun',
-                subtitle: 'Kelola profil dan koneksi',
+                subtitle: 'Kelola profil akunmu',
               ),
               const SizedBox(height: 12),
               SoftCard(
@@ -91,43 +92,6 @@ class ProfileScreen extends ConsumerWidget {
                       title: 'Edit profil',
                       subtitle: 'Ubah nama atau email',
                       onTap: () => _editDialog(context, ref, p),
-                    ),
-                    const Divider(indent: 72, endIndent: 14),
-                    _profileTile(
-                      context,
-                      icon: Icons.mark_email_read_rounded,
-                      color: scheme.secondary,
-                      title: 'Hubungkan Gmail',
-                      subtitle: 'Import otomatis email notifikasi bank',
-                      onTap: () async {
-                        try {
-                          final url = await api.gmailConnect();
-                          await launchUrl(Uri.parse(url),
-                              mode: LaunchMode.externalApplication);
-                        } catch (e) {
-                          if (context.mounted) showFriendlyError(context, e);
-                        }
-                      },
-                    ),
-                    const Divider(indent: 72, endIndent: 14),
-                    _profileTile(
-                      context,
-                      icon: Icons.link_off_rounded,
-                      color: const Color(0xFFFF9F43),
-                      title: 'Cabut akses Gmail',
-                      subtitle: 'Hentikan import email otomatis',
-                      onTap: () async {
-                        try {
-                          await api.gmailRevoke();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text('Akses Gmail dicabut.')));
-                          }
-                        } catch (e) {
-                          if (context.mounted) showFriendlyError(context, e);
-                        }
-                      },
                     ),
                   ],
                 ),
@@ -159,35 +123,35 @@ class ProfileScreen extends ConsumerWidget {
                       onTap: () => showDialog(
                           context: context,
                           builder: (_) => AlertDialog(
-                            title: const Text('Hapus akun?'),
-                            content: const Text(
-                                'Semua transaksi, budget, dan token akan dihapus permanen.'),
-                            actions: [
-                              TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Batal')),
-                              FilledButton(
-                                  style: FilledButton.styleFrom(
-                                      backgroundColor: scheme.error,
-                                      foregroundColor: scheme.onError),
-                                  onPressed: () async {
-                                    try {
-                                      await api.deleteAccount();
-                                      ref
-                                          .read(authStateProvider.notifier)
-                                          .state = false;
-                                      if (context.mounted) {
-                                        Navigator.pop(context);
-                                      }
-                                    } catch (e) {
-                                      if (context.mounted) {
-                                        showFriendlyError(context, e);
-                                      }
-                                    }
-                                  },
-                                  child: const Text('Hapus')),
-                            ],
-                          )),
+                                title: const Text('Hapus akun?'),
+                                content: const Text(
+                                    'Semua transaksi, budget, dan token akan dihapus permanen.'),
+                                actions: [
+                                  TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text('Batal')),
+                                  FilledButton(
+                                      style: FilledButton.styleFrom(
+                                          backgroundColor: scheme.error,
+                                          foregroundColor: scheme.onError),
+                                      onPressed: () async {
+                                        try {
+                                          await api.deleteAccount();
+                                          ref
+                                              .read(authStateProvider.notifier)
+                                              .state = false;
+                                          if (context.mounted) {
+                                            Navigator.pop(context);
+                                          }
+                                        } catch (e) {
+                                          if (context.mounted) {
+                                            showFriendlyError(context, e);
+                                          }
+                                        }
+                                      },
+                                      child: const Text('Hapus')),
+                                ],
+                              )),
                     ),
                   ],
                 ),
@@ -217,7 +181,8 @@ class ProfileScreen extends ConsumerWidget {
               color: titleColor ?? Theme.of(context).colorScheme.onSurface)),
       subtitle: Text(subtitle),
       trailing: Icon(Icons.chevron_right_rounded,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35)),
+          color:
+              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35)),
       onTap: onTap,
     );
   }
@@ -244,13 +209,13 @@ class ProfileScreen extends ConsumerWidget {
         ]),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Batal')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           FilledButton(
               onPressed: () async {
                 try {
-                  await ref.read(apiProvider).updateProfile(
-                      name: name.text, email: email.text);
+                  await ref
+                      .read(apiProvider)
+                      .updateProfile(name: name.text, email: email.text);
                   if (ctx.mounted) Navigator.pop(ctx);
                 } catch (e) {
                   if (ctx.mounted) showFriendlyError(ctx, e);

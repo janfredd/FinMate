@@ -62,31 +62,35 @@ class _DashboardState extends ConsumerState<DashboardScreen> {
             sum.when(
               data: (s) => Column(
                 children: [
-                  _BalanceCard(amount: s.balance),
+                  PressableScale(child: _BalanceCard(amount: s.balance)),
                   const SizedBox(height: 14),
                   Row(
                     children: [
                       Expanded(
-                        child: _StatCard(
-                          label: 'Pemasukan',
-                          value: s.income,
-                          icon: Icons.south_west_rounded,
-                          color: scheme.secondary,
+                        child: PressableScale(
+                          child: _StatCard(
+                            label: 'Pemasukan',
+                            value: s.income,
+                            icon: Icons.south_west_rounded,
+                            color: scheme.secondary,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: _StatCard(
-                          label: 'Pengeluaran',
-                          value: s.expense,
-                          icon: Icons.north_east_rounded,
-                          color: scheme.tertiary,
+                        child: PressableScale(
+                          child: _StatCard(
+                            label: 'Pengeluaran',
+                            value: s.expense,
+                            icon: Icons.north_east_rounded,
+                            color: scheme.tertiary,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _SavingsCard(amount: s.savings),
+                  PressableScale(child: _SavingsCard(amount: s.savings)),
                 ],
               ),
               loading: () => SizedBox(height: 220, child: loading()),
@@ -98,8 +102,10 @@ class _DashboardState extends ConsumerState<DashboardScreen> {
                   ? const SizedBox()
                   : Padding(
                       padding: const EdgeInsets.only(top: 20),
-                      child: _InsightBanner(
-                        message: list.first['message']?.toString() ?? '',
+                      child: PressableScale(
+                        child: _InsightBanner(
+                          message: list.first['message']?.toString() ?? '',
+                        ),
                       ),
                     ),
               loading: () => const SizedBox(),
@@ -111,15 +117,17 @@ class _DashboardState extends ConsumerState<DashboardScreen> {
               subtitle: 'Ke mana uangmu pergi?',
             ),
             const SizedBox(height: 12),
-            SoftCard(
-              padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                height: 220,
-                child: br.when(
-                  data: (items) => _Breakdown(items: items),
-                  loading: () => loading(),
-                  error: (e, _) =>
-                      errView(e, () => ref.invalidate(breakdownProvider)),
+            PressableScale(
+              child: SoftCard(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  height: 220,
+                  child: br.when(
+                    data: (items) => _Breakdown(items: items),
+                    loading: () => loading(),
+                    error: (e, _) =>
+                        errView(e, () => ref.invalidate(breakdownProvider)),
+                  ),
                 ),
               ),
             ),
@@ -136,21 +144,29 @@ class _DashboardState extends ConsumerState<DashboardScreen> {
                     child: EmptyState(
                       icon: Icons.receipt_long_rounded,
                       title: 'Belum ada transaksi',
-                      message: 'Yuk mulai catat pemasukan atau pengeluaran pertamamu!',
+                      message:
+                          'Yuk mulai catat pemasukan atau pengeluaran pertamamu!',
                     ),
                   );
                 }
                 final recent = list.take(5).toList();
-                return SoftCard(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                  child: Column(
-                    children: [
-                      for (var i = 0; i < recent.length; i++) ...[
-                        _TxnRow(txn: recent[i]),
-                        if (i != recent.length - 1)
-                          const Divider(indent: 66, endIndent: 12),
+                return PressableScale(
+                  child: SoftCard(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < recent.length; i++) ...[
+                          FadeSlideIn(
+                            key: ValueKey('recent-${recent[i].id}'),
+                            delay: Duration(milliseconds: i * 60),
+                            child: _TxnRow(txn: recent[i]),
+                          ),
+                          if (i != recent.length - 1)
+                            const Divider(indent: 66, endIndent: 12),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 );
               },
@@ -235,9 +251,7 @@ class _BalanceCard extends StatelessWidget {
                     child: Text(
                       'FinMate',
                       style: TextStyle(
-                          color: fg,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700),
+                          color: fg, fontSize: 11, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ],
@@ -259,8 +273,8 @@ class _BalanceCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 'Saldo gabungan dari semua transaksi',
-                style: TextStyle(
-                    color: fg.withValues(alpha: 0.72), fontSize: 12),
+                style:
+                    TextStyle(color: fg.withValues(alpha: 0.72), fontSize: 12),
               ),
             ],
           ),
@@ -336,9 +350,8 @@ class _InsightBanner extends StatelessWidget {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
     final titleColor = dark ? const Color(0xFFFFE082) : const Color(0xFF7A5B00);
-    final bodyColor = dark
-        ? Colors.white.withValues(alpha: 0.85)
-        : const Color(0xFF6B5400);
+    final bodyColor =
+        dark ? Colors.white.withValues(alpha: 0.85) : const Color(0xFF6B5400);
     return SoftCard(
       padding: const EdgeInsets.all(16),
       shadow: false,
@@ -547,8 +560,7 @@ class _Breakdown extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          formatRupiah(
-                              (items[i]['total'] as num).toDouble()),
+                          formatRupiah((items[i]['total'] as num).toDouble()),
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
