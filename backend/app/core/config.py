@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     FCM_CREDENTIALS_JSON: str = "./firebase-service-account.json"
     FRONTEND_URL: str = "finmate://oauth/callback"
     CORS_ORIGINS: str = "*"
+    MIDTRANS_SERVER_KEY: str = ""
+    MIDTRANS_CLIENT_KEY: str = ""
+    MIDTRANS_SIGNATURE_KEY: str = ""
+    MIDTRANS_IS_PRODUCTION: bool = False
 
     class Config:
         env_file = ".env"

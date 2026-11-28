@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+import csv
+import io
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from datetime import date
 from app.core.deps import get_db, get_current_user_id
-from app.models.models import Category, Transaction
+from app.models.models import Category, Transaction, User
 from app.schemas.schemas import (CategoryIn, CategoryOut, TxnIn, TxnOut)
 
 router = APIRouter()
@@ -73,6 +75,37 @@ def search_txns(q: str = "", type: str | None = None, category_id: str | None = 
         qry = qry.filter((Transaction.merchant.ilike(like)) |
                          (Transaction.note.ilike(like)))
     return [_out(db, t) for t in qry.order_by(Transaction.date.desc()).limit(200).all()]
+
+@router.get("/transactions/export")
+def export_txns(uid: str = Depends(get_current_user_id),
+                db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(id=uid).first()
+    if not user or not user.is_premium:
+        raise HTTPException(
+            status_code=403,
+            detail=("Fitur ekspor CSV hanya tersedia untuk pengguna Premium. "
+                    "Upgrade ke Premium untuk mengaksesnya."),
+        )
+    rows = (db.query(Transaction).filter_by(user_id=uid)
+            .order_by(Transaction.date.desc(), Transaction.created_at.desc())
+            .all())
+    names = {c.id: c.name for c in db.query(Category).all()}
+    buf = io.StringIO(newline="")
+    writer = csv.writer(buf)
+    writer.writerow(["date", "type", "amount", "category", "merchant",
+                     "note", "source"])
+    for t in rows:
+        writer.writerow([t.date, t.type, f"{float(t.amount):.2f}",
+                         names.get(t.category_id, ""), t.merchant or "",
+                         t.note or "", t.source or ""])
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition":
+                'attachment; filename="finmate_transactions.csv"',
+        },
+    )
 
 @router.post("/transactions", response_model=TxnOut, status_code=201)
 def create_txn(body: TxnIn, uid: str = Depends(get_current_user_id),

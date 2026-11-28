@@ -23,6 +23,7 @@ class ProfileOut(BaseModel):
     id: str
     email: str
     name: str | None
+    is_premium: bool = False
     created_at: datetime | None
 
 class ProfileUpdate(BaseModel):
@@ -103,3 +104,13 @@ class BreakdownItem(BaseModel):
     category_id: str | None
     category_name: str
     total: float
+
+# ---- Payments (Midtrans Snap) ----
+class PaymentRequest(BaseModel):
+    amount: float = Field(gt=0)
+    plan_name: str = Field(min_length=1, max_length=100)
+
+class PaymentResponse(BaseModel):
+    order_id: str
+    token: str
+    redirect_url: str

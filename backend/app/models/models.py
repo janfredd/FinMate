@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, date
 from sqlalchemy import (Column, String, Text, Numeric, Date, DateTime,
-                        Boolean, ForeignKey)
+                        Boolean, ForeignKey, Integer)
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
 from app.core.deps import Base
@@ -16,6 +16,9 @@ class User(Base):
     email = Column(Text, unique=True, nullable=False, index=True)
     password_hash = Column(Text, nullable=False)
     name = Column(Text, nullable=True)
+    is_premium = Column(Boolean, default=False, nullable=False)
+    ai_messages_today = Column(Integer, default=0, nullable=False)
+    last_ai_message_date = Column(Date, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Category(Base):

@@ -33,6 +33,8 @@ class _DashboardState extends ConsumerState<DashboardScreen> {
     final br = ref.watch(breakdownProvider);
     final tx = ref.watch(txnsProvider);
     final insights = ref.watch(insightsProvider);
+    final profile = ref.watch(profileProvider);
+    final isPremium = profile.asData?.value['is_premium'] == true;
     final scheme = Theme.of(context).colorScheme;
 
     ref.listen(insightsProvider, (_, next) {
@@ -105,6 +107,7 @@ class _DashboardState extends ConsumerState<DashboardScreen> {
                       child: PressableScale(
                         child: _InsightBanner(
                           message: list.first['message']?.toString() ?? '',
+                          isPremium: isPremium,
                         ),
                       ),
                     ),
@@ -343,7 +346,11 @@ class _StatCard extends StatelessWidget {
 
 class _InsightBanner extends StatelessWidget {
   final String message;
-  const _InsightBanner({required this.message});
+  final bool isPremium;
+  const _InsightBanner({required this.message, required this.isPremium});
+
+  String get _displayMessage =>
+      isPremium ? message : message.replaceAll(RegExp(r'[0-9]'), '*');
 
   @override
   Widget build(BuildContext context) {
@@ -395,7 +402,7 @@ class _InsightBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  message,
+                  _displayMessage,
                   style: theme.textTheme.bodySmall?.copyWith(
                     height: 1.45,
                     color: bodyColor,
@@ -403,6 +410,24 @@ class _InsightBanner extends StatelessWidget {
                   maxLines: 4,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (!isPremium) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(Icons.lock_rounded, size: 14, color: titleColor),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Upgrade untuk melihat detail penghematan',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: titleColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

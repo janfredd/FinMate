@@ -28,6 +28,13 @@ class UnauthorizedException implements Exception {
   String toString() => '';
 }
 
+class PremiumRequiredException implements Exception {
+  final String message;
+  const PremiumRequiredException(this.message);
+  @override
+  String toString() => message;
+}
+
 // Dio client: attaches JWT, maps low-level errors to friendly messages,
 // and clears the session + redirects to Login on HTTP 401.
 class ApiClient {
@@ -50,8 +57,8 @@ class ApiClient {
       onError: (e, h) async {
         final status = e.response?.statusCode;
         final path = e.requestOptions.path;
-        final isCredentialRequest = path.contains('/auth/login') ||
-            path.contains('/auth/register');
+        final isCredentialRequest =
+            path.contains('/auth/login') || path.contains('/auth/register');
 
         if (status == 401) {
           if (isCredentialRequest) {
@@ -116,6 +123,7 @@ class ApiClient {
 
 String friendlyError(Object e) {
   if (e is FriendlyException) return e.message;
+  if (e is PremiumRequiredException) return e.message;
   if (e is UnauthorizedException) return '';
   if (e is DioException) {
     final inner = e.error;
@@ -139,6 +147,5 @@ String friendlyError(Object e) {
 void showFriendlyError(BuildContext context, Object e) {
   final message = friendlyError(e);
   if (message.isEmpty) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)));
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }

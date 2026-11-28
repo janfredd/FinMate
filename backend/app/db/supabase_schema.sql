@@ -7,6 +7,9 @@ create table if not exists users (
   email text unique not null,
   password_hash text not null,
   name text,
+  is_premium boolean not null default false,
+  ai_messages_today integer not null default 0,
+  last_ai_message_date date,
   created_at timestamptz default now()
 );
 

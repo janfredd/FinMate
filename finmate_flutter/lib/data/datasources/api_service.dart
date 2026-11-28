@@ -2,6 +2,12 @@ import 'package:dio/dio.dart';
 import '../../core/api_client.dart';
 import '../models/models.dart';
 
+class PaymentSession {
+  final String orderId;
+  final String redirectUrl;
+  const PaymentSession({required this.orderId, required this.redirectUrl});
+}
+
 // All REST calls per SRS/SDD endpoint table. JSON in/out.
 class ApiService {
   final ApiClient client;
@@ -77,6 +83,19 @@ class ApiService {
       _d.put('/transactions/$id', data: body);
   Future<void> deleteTxn(String id) => _d.delete('/transactions/$id');
 
+  Future<String> exportTransactionsCsv() async {
+    try {
+      final r = await _d.get('/transactions/export',
+          options: Options(responseType: ResponseType.plain));
+      return r.data?.toString() ?? '';
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        throw PremiumRequiredException(_premiumDetail(e));
+      }
+      rethrow;
+    }
+  }
+
   Future<Summary> summary() async =>
       Summary.fromJson((await _d.get('/dashboard/summary')).data);
   Future<List<Map<String, dynamic>>> breakdown() async =>
@@ -93,8 +112,23 @@ class ApiService {
       : _d.put('/budgets/$id', data: body);
 
   Future<String> chat(String q) async {
-    final r = await _d.post('/ai/chat', data: {'question': q});
-    return r.data['answer'] as String;
+    try {
+      final r = await _d.post('/ai/chat', data: {'question': q});
+      return r.data['answer'] as String;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        throw PremiumRequiredException(_premiumDetail(e));
+      }
+      rethrow;
+    }
+  }
+
+  String _premiumDetail(DioException e) {
+    final data = e.response?.data;
+    if (data is Map && data['detail'] is String) {
+      return data['detail'] as String;
+    }
+    return 'Fitur ini hanya tersedia untuk pengguna Premium.';
   }
 
   Future<Map<String, dynamic>> parseVoice(String text) async {
@@ -105,5 +139,20 @@ class ApiService {
   Future<List<Map<String, dynamic>>> insights({bool refresh = false}) async {
     final r = await _d.get('/insights', queryParameters: {'refresh': refresh});
     return List<Map<String, dynamic>>.from(r.data);
+  }
+
+  Future<PaymentSession> createPayment(double amount,
+      {String planName = 'FinMate Premium'}) async {
+    final r = await _d.post('/payments/checkout',
+        data: {'amount': amount, 'plan_name': planName});
+    return PaymentSession(
+      orderId: (r.data['order_id'] ?? '') as String,
+      redirectUrl: (r.data['redirect_url'] ?? '') as String,
+    );
+  }
+
+  Future<Map<String, dynamic>> checkPaymentStatus(String orderId) async {
+    final r = await _d.get('/payments/check-status/$orderId');
+    return Map<String, dynamic>.from(r.data);
   }
 }

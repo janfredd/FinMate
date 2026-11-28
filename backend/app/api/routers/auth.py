@@ -53,7 +53,8 @@ def get_profile(uid: str = Depends(get_current_user_id), db: Session = Depends(g
     u = db.query(User).filter_by(id=uid).first()
     if not u:
         raise HTTPException(404, "User not found")
-    return ProfileOut(id=u.id, email=u.email, name=u.name, created_at=u.created_at)
+    return ProfileOut(id=u.id, email=u.email, name=u.name,
+                      is_premium=bool(u.is_premium), created_at=u.created_at)
 
 @router.put("/user/profile", response_model=ProfileOut)
 def update_profile(body: ProfileUpdate, uid: str = Depends(get_current_user_id),
@@ -70,7 +71,8 @@ def update_profile(body: ProfileUpdate, uid: str = Depends(get_current_user_id),
         u.email = body.email.lower()
     db.commit()
     db.refresh(u)
-    return ProfileOut(id=u.id, email=u.email, name=u.name, created_at=u.created_at)
+    return ProfileOut(id=u.id, email=u.email, name=u.name,
+                      is_premium=bool(u.is_premium), created_at=u.created_at)
 
 @router.delete("/user/account")
 def delete_account(uid: str = Depends(get_current_user_id),

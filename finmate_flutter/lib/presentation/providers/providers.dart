@@ -6,6 +6,7 @@ import '../../data/models/models.dart';
 
 final authStateProvider = StateProvider<bool>((_) => false);
 final themeProvider = StateProvider<ThemeMode>((_) => ThemeMode.light);
+final pendingPaymentOrderProvider = StateProvider<String?>((_) => null);
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final client = ApiClient();
@@ -19,14 +20,16 @@ final apiProvider = Provider((ref) => ApiService(ref.watch(apiClientProvider)));
 
 final categoriesProvider = FutureProvider<List<Category>>(
     (ref) => ref.watch(apiProvider).categories());
-final txnsProvider = FutureProvider<List<Txn>>(
-    (ref) => ref.watch(apiProvider).transactions());
-final summaryProvider = FutureProvider<Summary>(
-    (ref) => ref.watch(apiProvider).summary());
+final profileProvider = FutureProvider<Map<String, dynamic>>(
+    (ref) => ref.watch(apiProvider).profile());
+final txnsProvider =
+    FutureProvider<List<Txn>>((ref) => ref.watch(apiProvider).transactions());
+final summaryProvider =
+    FutureProvider<Summary>((ref) => ref.watch(apiProvider).summary());
 final breakdownProvider = FutureProvider<List<Map<String, dynamic>>>(
     (ref) => ref.watch(apiProvider).breakdown());
-final budgetsProvider = FutureProvider<List<Budget>>(
-    (ref) => ref.watch(apiProvider).budgets());
+final budgetsProvider =
+    FutureProvider<List<Budget>>((ref) => ref.watch(apiProvider).budgets());
 final insightsProvider = FutureProvider<List<Map<String, dynamic>>>(
     (ref) => ref.watch(apiProvider).insights(refresh: true));
 
@@ -34,13 +37,15 @@ final insightsProvider = FutureProvider<List<Map<String, dynamic>>>(
 class ChatMsg {
   final String role; // user | ai
   final String text;
-  ChatMsg(this.role, this.text);
+  final bool showUpgrade;
+  ChatMsg(this.role, this.text, {this.showUpgrade = false});
 }
 
 class ChatNotifier extends StateNotifier<List<ChatMsg>> {
   ChatNotifier() : super([]);
   void addUser(String t) => state = [...state, ChatMsg('user', t)];
-  void addAi(String t) => state = [...state, ChatMsg('ai', t)];
+  void addAi(String t, {bool showUpgrade = false}) =>
+      state = [...state, ChatMsg('ai', t, showUpgrade: showUpgrade)];
 }
 
 final chatProvider =
@@ -52,4 +57,5 @@ void refreshAll(WidgetRef ref) {
   ref.invalidate(breakdownProvider);
   ref.invalidate(budgetsProvider);
   ref.invalidate(categoriesProvider);
+  ref.invalidate(profileProvider);
 }

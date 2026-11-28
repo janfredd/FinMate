@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
+import '../../core/app_router.dart';
 import '../../core/ui_kit.dart';
 import '../providers/providers.dart';
+import 'profile_screen.dart';
 
 // Chat bubbles + proactive insights header.
 class AiScreen extends ConsumerStatefulWidget {
@@ -24,6 +26,8 @@ class _AiState extends ConsumerState<AiScreen> {
     try {
       final a = await ref.read(apiProvider).chat(q); // <10s target
       ref.read(chatProvider.notifier).addAi(a);
+    } on PremiumRequiredException catch (e) {
+      ref.read(chatProvider.notifier).addAi(e.message, showUpgrade: true);
     } catch (e) {
       final msg = friendlyError(e);
       if (msg.isNotEmpty) ref.read(chatProvider.notifier).addAi(msg);
@@ -79,8 +83,8 @@ class _AiState extends ConsumerState<AiScreen> {
                           border: me
                               ? null
                               : Border.all(
-                                  color: scheme.onSurface
-                                      .withValues(alpha: 0.07)),
+                                  color:
+                                      scheme.onSurface.withValues(alpha: 0.07)),
                           boxShadow: me
                               ? [
                                   BoxShadow(
@@ -92,11 +96,40 @@ class _AiState extends ConsumerState<AiScreen> {
                                 ]
                               : null,
                         ),
-                        child: Text(
-                          m.text,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: me ? scheme.onPrimary : scheme.onSurface,
-                          ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              m.text,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: me ? scheme.onPrimary : scheme.onSurface,
+                              ),
+                            ),
+                            if (m.showUpgrade) ...[
+                              const SizedBox(height: 10),
+                              OutlinedButton.icon(
+                                onPressed: () => Navigator.of(context).push(
+                                  slideFadeRoute(const ProfileScreen()),
+                                ),
+                                icon: const Icon(
+                                    Icons.workspace_premium_rounded,
+                                    size: 18),
+                                label: const Text('Upgrade ke Premium'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: scheme.primary,
+                                  side: BorderSide(
+                                      color: scheme.primary
+                                          .withValues(alpha: 0.5)),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  textStyle: const TextStyle(
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     );
